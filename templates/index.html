@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Index
+{% endblock %}
+
+{% block main %}
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Shares</th>
+            <th>Price</th>
+            <th>TOTAL</th>
+        </tr>
+    </thead>
+    <tbody>
+
+        {% for row in range(length_symbols) %}
+        <tr>
+            <td>{{array_symbols[row]}}</td>
+            <td>{{array_names[row]}}</td>
+            <td>{{array_shares[row]}}</td>
+            <td>{{array_prices[row] | usd}}</td>
+            <td>{{total_price_per_symbol[row] | usd}}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+            <td colspan="1">CASH</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>{{cash_in_account | usd}}</td>
+        </tr>
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="4"></td>
+            <td>
+                <b>{{grand_total | usd}}</b>
+            </td>
+        </tr>
+    </tfoot>
+</table>
+{% endblock %}
