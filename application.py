@@ -41,24 +41,21 @@ db = SQL("sqlite:///finance.db")
 if not os.environ.get("API_KEY"):
     raise RuntimeError("API_KEY not set")
 
-def _sum(total_price_per_symbol, length_total_price):
-
-    return(sum(total_price_per_symbol))
 
 @app.route("/")
 @login_required
 def index():
     """Show portfolio of stocks"""
-
+    #How much money user has in account
     cash_in_account = db.execute("SELECT cash FROM users WHERE id=:user_id", user_id=session.get("user_id"))[0]["cash"]
-
+    #Stocks symbols user has in portofolio
     symbols = db.execute("SELECT symbol FROM transactions WHERE id=:user_id", user_id=session.get("user_id"))
-
+    #I used this array to have distinct stocks symbols, I should have used set(), I know...
     array_symbols=[]
     for i in range( 0, len(symbols), 1):
         if not symbols[i]["symbol"] in array_symbols:
             array_symbols.append(symbols[i]["symbol"])
-
+    #This list holds the total number of a single stock symbol
     array_shares=[]
     for l in range( 0, len(array_symbols), 1):
         shares = db.execute("SELECT SUM (shares) FROM transactions WHERE id=:user_id AND symbol=:symbol",
@@ -66,26 +63,26 @@ def index():
         symbol=array_symbols[l])[0]["SUM (shares)"]
 
         array_shares.append(shares)
-
+    #This list holds the name of the company
     array_names=[]
     for j in range(0 ,len(array_symbols), 1):
         array_names.append(lookup(array_symbols[j])["name"])
-
+    #Current price of a specific stock
     array_prices=[]
     for k in range(0 ,len(array_symbols), 1):
         array_prices.append(lookup(array_symbols[k])["price"])
 
     length_symbols=len(array_symbols)
-
+    #This list holds the total value of a specific stock in user's portofolio
     total_price_per_symbol=[]
     for row in range(length_symbols):
         total_prices_per_symbol = array_prices[row]*array_shares[row]
         total_price_per_symbol.append(total_prices_per_symbol)
 
+ 
+    total_price_symbol = sum(total_price_per_symbol) #Holds total amount of stocks values in portofolio
 
-    length_total_price = len(total_price_per_symbol)
-    total_price_symbol = _sum(total_price_per_symbol, length_total_price)
-
+    #Cash left in account + total amount of stocks values user has in portofolio
     grand_total = cash_in_account + total_price_symbol
 
     return render_template("index.html",
@@ -103,16 +100,18 @@ def index():
 @login_required
 def buy():
     """Buy shares of stock"""
+    #User inputs
     shares = request.form.get("shares")
     symbol = request.form.get("symbol")
 
     if request.method == "POST":
-        price = lookup(symbol)
+        price = lookup(symbol) #Current price of a specific stock
 
-        symbol = symbol.upper()
+        symbol = symbol.upper() #Capitalize stock name
 
-        now = datetime.now()
+        now = datetime.now() #Current time
 
+        #<-- errors
         if not symbol:
             return apology("must provide symbol", 400)
 
@@ -133,56 +132,66 @@ def buy():
         if not price:
             return apology("the symbol doesn`t exists", 400)
 
+        #<--END errors
+        #How much money user has in account
         cash_in_account = db.execute("SELECT cash FROM users WHERE id=:user_id", user_id=session.get("user_id"))[0]["cash"]
 
-        #daca suma din portofel nu este mai mica decat pretul unei actiuni * numarul pe care vreau sa il cumpar
+        #This 'if' checks if user has enough money to buy
         if cash_in_account > (price["price"] * float(shares)):
 
+        	#Checks how many symbols a user has in portofolio
             len_symbols = db.execute("SELECT symbol FROM transactions WHERE id=:user_id", user_id=session.get("user_id"))
             length_symbols = len(len_symbols)
 
+            #This list holds a list of every symbol the user has traded
             array_symbols=[]
             for i in range(length_symbols):
+                array_symbols.append(len_symbols[i]["symbol"])
 
-                symbols = db.execute("SELECT symbol FROM transactions WHERE id=:user_id", user_id=session.get("user_id"))[i]["symbol"]
-                array_symbols.append(symbols)
-
+            #This if checks if the bought stock is already in user's portofolio or not
             if symbol in array_symbols:
 
+            	#This holds how many shares of a single symbol a user has in portofolio
                 shares_in = db.execute("SELECT shares FROM transactions WHERE id=:user_id AND symbol=:symbol",
                 user_id=session.get("user_id"),
                 symbol=symbol)[0]["shares"]
 
+                #Modifies the number of shares 
                 update_shares = db.execute("UPDATE transactions SET shares=:modified_shares WHERE id=:user_id AND symbol=:symbol",
                 user_id=session.get("user_id"),
                 modified_shares = int(shares) + int(shares_in),
                 symbol=symbol)
 
+                #Money in account after the stock is bought
                 cash_in_account = cash_in_account - price["price"] * float(shares)
 
+                #Modifies user's money in database
                 update_cash = db.execute("UPDATE users SET cash=:cash_in_account WHERE id=:user_id",
                 cash_in_account=cash_in_account,
                 user_id=session.get("user_id"))
 
+                #Inserts data into database about the stock that was bought
                 history = db.execute("INSERT INTO history (symbol, shares, price, date, id) VALUES (:symbol, :shares, :price, :date, :user_id)",
                 user_id=session.get("user_id"),
                 symbol = symbol,
                 shares = shares,
                 date = now,
                 price = price["price"])
-
+            #Else bought stock was not in user's portofolio
             else:
-
+            	#Inserts datas about bought stock
                 transactions = db.execute("INSERT INTO transactions (id, symbol, shares, date, price) VALUES (:user_id, :symbol, :shares, :date, :price)",
-                user_id=session.get("user_id"),
+                user_id = session.get("user_id"),
                 symbol = symbol,
                 shares = shares,
                 date = now,
                 price = price["price"])
 
+                #Modifies user's money in database
                 cash_in_account = cash_in_account - price["price"] * float(shares)
                 update_cash = db.execute("UPDATE users SET cash=:cash_in_account WHERE id=:user_id", cash_in_account=cash_in_account, user_id=session.get("user_id"))
 
+                #Inserts data into database about the stock that was bought
                 history = db.execute("INSERT INTO history (symbol, shares, price, date, id) VALUES (:symbol, :shares, :price, :date, :user_id)",
                 user_id=session.get("user_id"),
                 symbol = symbol,
@@ -216,6 +225,8 @@ def check():
 @login_required
 def history():
 
+	#Everything about the transactions history
+
     history = db.execute("SELECT * FROM history WHERE id=:user_id", user_id=session.get("user_id"))
     length_history = len(history)
 
@@ -236,35 +247,35 @@ def history():
 def login():
     """Log user in"""
 
-    # Forget any user_id
+    #Forget any user_id
     session.clear()
 
-    # User reached route via POST (as by submitting a form via POST)
+    #User reached route via POST
     if request.method == "POST":
 
-        # Ensure username was submitted
+        #Ensure username was submitted
         if not request.form.get("username"):
             return apology("must provide username", 400)
 
-        # Ensure password was submitted
+        #Ensure password was submitted
         elif not request.form.get("password"):
             return apology("must provide password", 400)
 
-        # Query database for username
+        #Query database for username
         rows = db.execute("SELECT * FROM users WHERE username = :username",
                           username=request.form.get("username"))
 
-        # Ensure username exists and password is correct
+        #Ensure username exists and password is correct
         if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("password")):
             return apology("invalid username and/or password", 400)
 
-        # Remember which user has logged in
+        #Remember which user has logged in
         session["user_id"] = rows[0]["id"]
 
-        # Redirect user to home page
+        #Redirect user to home page
         return redirect("/")
 
-    # User reached route via GET (as by clicking a link or via redirect)
+    #User reached route via GET
     else:
         return render_template("login.html")
 
@@ -273,10 +284,10 @@ def login():
 def logout():
     """Log user out"""
 
-    # Forget any user_id
+    #Forget any user_id
     session.clear()
 
-    # Redirect user to login form
+    #Redirect user to login form
     return redirect("/")
 
 
@@ -286,13 +297,13 @@ def quote():
     """Get stock quote."""
     if request.method == "POST":
 
-
+    	#This checks informations about a specific stock user has inputted
         quote = lookup(request.form.get("symbol"))
 
-
+        #error
         if not quote:
             return apology("the symbol doesn`t exist", 400)
-
+        #error
         if not request.form.get("symbol"):
             return apology("must provide symbol", 400)
 
@@ -310,21 +321,23 @@ def quote():
 @app.route("/changepassword", methods=["GET", "POST"])
 def changepassword():
     if request.method == "POST":
-
+    	#Query database for username
         rows = db.execute("SELECT * FROM users WHERE id = :user_id",
                           user_id=session.get("user_id"))
 
-        # Ensure username exists and password is correct
+        #Ensure username exists and password is correct
         if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("current_password")):
             return apology("current password incorrect", 400)
-
+        #Error if password and password confirmation didn't match
         if request.form.get("new_password") != request.form.get("confirmation"):
             return apology("passwords didn`t match", 400)
 
+        #Modifies database with new password
         db.execute("UPDATE users SET hash = :hashed_password WHERE id = :user_id",
                    user_id=session.get("user_id"),
                    hashed_password=generate_password_hash(request.form.get("new_password")))
 
+        #Log out
         session.clear()
 
         return redirect("/")
@@ -337,37 +350,38 @@ def changepassword():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    # Forget any user_id
+    #Forget any user_id
     session.clear()
 
-    # User reached route via POST (as by submitting a form via POST)
+    #User reached route via POST 
     if request.method == "POST":
 
-        # Ensure username was submitted
+        #Ensure username was submitted
         if not request.form.get("username"):
             return apology("must provide username", 400)
 
-        # Ensure password was submitted
+        #Ensure password was submitted
         elif not request.form.get("password"):
             return apology("must provide password", 400)
-
+        #Ensure password confirmation was submitted
         elif not request.form.get("confirmation"):
             return apology("must provide password again", 400)
-
+        #Ensures passwords did match
         elif request.form.get("password") != request.form.get("confirmation"):
             return apology("passwords didn`t match")
 
+        #<-- These lines checks if username is already in database 
         usernames = db.execute("SELECT username FROM users")
         length_usernames = len(usernames)
 
         array_usernames=[]
         for names in range(length_usernames):
             array_usernames.append(usernames[names]["username"])
-
+        #Error
         if request.form.get("username") in array_usernames:
             return apology("Username not available", 400)
-
-        # Insert data in database
+        #<-- END
+        #Insert data in database
         db.execute('INSERT INTO "users" ("id","username","hash") VALUES (NULL, :username, :hashed_password)',
                    username=request.form.get("username"),
                    hashed_password=generate_password_hash(request.form.get("password")))
@@ -385,8 +399,8 @@ def sell():
 
     if request.method == "POST":
 
-        now = datetime.now()
-
+        now = datetime.now() #Current time
+        #<-- Errors
         if not request.form.get("symbol"):
             return apology("must provide symbol", 400)
 
@@ -395,43 +409,48 @@ def sell():
 
         elif int(request.form.get("shares")) < 1:
             return apology("the number of shares must be positive integer", 400)
+        #<-- END
 
-        #shares imi tine numarul actiunilor pe care il are un simbol
+        #Holds how many shares user has of a specific symbol
         shares = db.execute("SELECT shares FROM transactions WHERE id=:user_id AND symbol=:symbol",
         user_id=session.get("user_id"),
         symbol=request.form.get("symbol"))[0]["shares"]
 
-        shares_input = int(request.form.get("shares"))
+        shares_input = int(request.form.get("shares")) #User's input
 
-        price = lookup(request.form.get("symbol"))
+        price = lookup(request.form.get("symbol")) #Current price of that stock
 
 
 
-        #intra daca cantitatea pe care o introduc sa o vand este mai mica sau egala decat cat detin
+        #Checks if user has enough shares to sell
         if int(request.form.get("shares")) > int(shares):
             return apology("you don`t have enough shares", 400)
         else:
-            #price shares imi tine suma obtinuta din vanzarea a X shareuri la pretul pietei
+            #Holds the value obtained after selling
             price_shares = int(request.form.get("shares")) * lookup(request.form.get("symbol"))["price"]
 
-            #cash in account imi tine cati bani sunt in portofel
+            #Holds how much money user has in account
             cash_in_account = db.execute("SELECT cash FROM users WHERE id=:user_id", user_id=session.get("user_id"))[0]["cash"]
 
             update_cash = price_shares+cash_in_account
 
+            #Modifies how much money the user has after selling
             sell_share= db.execute("UPDATE users SET cash=:cash WHERE id=:user_id",
             cash=update_cash,
             user_id=session.get("user_id"))
 
+            #Modifies the number of shares the user has after selling some of them
             updated_shares = db.execute("UPDATE transactions SET shares=:modified_shares WHERE id=:user_id AND symbol=:symbol",
             user_id=session.get("user_id"),
             modified_shares = int(shares) - int(request.form.get("shares")),
             symbol=request.form.get("symbol"))
 
+            #Holds current amount of shares of a specific symbol
             shares = db.execute("SELECT shares FROM transactions WHERE id=:user_id AND symbol=:symbol",
             user_id=session.get("user_id"),
             symbol=request.form.get("symbol"))[0]["shares"]
 
+            #Inserts into database the transaction
             history = db.execute("INSERT INTO history (symbol, shares, price, date, id) VALUES (:symbol, :shares, :price, :date, :user_id)",
             user_id = session.get("user_id"),
             symbol = request.form.get("symbol"),
@@ -439,15 +458,17 @@ def sell():
             date = now,
             price = price["price"])
 
+            #If the number of shares of a specific symbol is 0, deletes the symbol from portofolio
             if int(shares) == 0:
                 db.execute("DELETE FROM transactions WHERE id=:user_id AND symbol=:symbol",
                 user_id=session.get("user_id"),
                 symbol=request.form.get("symbol"))
 
     else:
-        #ELSE imi arata ce simboluri am in portofoliu ca sa pot vinde
+        #This 'else' shows to the user what symbols he has in portofolio available for selling
         symbols = db.execute("SELECT symbol FROM transactions WHERE id=:user_id", user_id=session.get("user_id"))
 
+        #List of symbols user has in portofolio
         array_symbols=[]
         for i in range( 0, len(symbols), 1):
             if not symbols[i]["symbol"] in array_symbols:
