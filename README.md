@@ -1,4 +1,5 @@
 # Cs50 finance webapp
+# Remember that this was my first Python project. I know that it could have been done better but it does it's job.
 This project can be found on www.cosmincristescu.com, requires registration. It's a webapp based on Flask microframework and written in Python.
 It represents a stock simulator. First after signning up on the
 platform, the new user receives $10.000 by default. The money can be used to buy or sell stocks. The
